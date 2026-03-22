@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 /* ╔══════════════════════════════════════════════════════════════╗
    ║  CONFIGURATION — Reads from .env via Vite                   ║
@@ -9,26 +9,20 @@ const CONFIG = {
   IMGBB_API_KEY: import.meta.env.VITE_IMGBB_API_KEY || "",
 };
 
-/* ═══ STORAGE ABSTRACTION ═══ */
+/* ═══ STORAGE (GOOGLE SHEETS) ═══ */
 const DB = {
   async get(key) {
-    if (CONFIG.GOOGLE_SCRIPT_URL) {
-      try {
-        const r = await fetch(`${CONFIG.GOOGLE_SCRIPT_URL}?action=get&key=${encodeURIComponent(key)}`);
-        const t = await r.text();
-        return t && t !== "null" ? JSON.parse(t) : null;
-      } catch (e) { console.error("DB get error:", e); return null; }
-    }
-    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch { return null; }
+    try {
+      const r = await fetch(`${CONFIG.GOOGLE_SCRIPT_URL}?action=get&key=${encodeURIComponent(key)}`);
+      const t = await r.text();
+      return t && t !== "null" ? JSON.parse(t) : null;
+    } catch (e) { console.error("DB get error:", e); return null; }
   },
   async set(key, val) {
-    if (CONFIG.GOOGLE_SCRIPT_URL) {
-      try {
-        await fetch(CONFIG.GOOGLE_SCRIPT_URL, { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify({ action: "set", key, value: val }) });
-        return true;
-      } catch (e) { console.error("DB set error:", e); return false; }
-    }
-    try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch { return false; }
+    try {
+      await fetch(CONFIG.GOOGLE_SCRIPT_URL, { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify({ action: "set", key, value: val }) });
+      return true;
+    } catch (e) { console.error("DB set error:", e); return false; }
   },
 };
 
@@ -42,6 +36,21 @@ const uploadToImgBB = async (file) => {
     const d = await r.json();
     return d.data?.url || null;
   } catch (e) { console.error("ImgBB error:", e); return null; }
+};
+
+/* ═══ SECURITY QUESTIONS ═══ */
+const SECURITY_QUESTIONS = [
+  "What is your pet's name?",
+  "What city were you born in?",
+  "What is your favorite movie?",
+  "What was your first school's name?",
+  "What is your mother's maiden name?",
+];
+
+const generateRecoveryKey = () => {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const seg = () => Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+  return `${seg()}-${seg()}-${seg()}`;
 };
 
 /* ═══ DEFAULTS ═══ */
@@ -204,7 +213,7 @@ section{padding:4rem 1.2rem}
 @keyframes pu{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(1.3)}}
 .stx{font-family:'Orbitron';font-size:0.72rem;font-weight:700;letter-spacing:2px}
 .htx{font-family:'Space Mono';font-size:0.72rem;color:var(--mt)}
-.mode-badge{position:fixed;bottom:0.5rem;left:0.5rem;font-family:'Space Mono';font-size:0.55rem;color:var(--mt);background:var(--cd);border:1px solid rgba(0,240,255,0.1);padding:0.2rem 0.5rem;z-index:999;opacity:0.6}
+
 
 .field{margin-bottom:0.9rem}
 .field label{display:block;font-family:'Orbitron';font-size:0.58rem;font-weight:700;letter-spacing:2px;color:var(--c);margin-bottom:0.3rem;text-transform:uppercase}
@@ -232,7 +241,7 @@ section{padding:4rem 1.2rem}
 .bd{border-color:#ff4444;color:#ff4444}.bd:hover{background:#ff4444;color:var(--bg)}
 .bsv{border-color:var(--c);color:var(--c);padding:0.45rem 1.2rem;font-family:'Orbitron';font-size:0.62rem;letter-spacing:2px}
 .bsv:hover{background:var(--c);color:var(--bg);box-shadow:0 0 12px #00f0ff44}
-.lbox{max-width:360px;margin:12vh auto;padding:2rem;background:var(--cd);border:1px solid rgba(0,240,255,0.12);text-align:center}
+.lbox{max-width:400px;margin:6vh auto;padding:2rem;background:var(--cd);border:1px solid rgba(0,240,255,0.12);text-align:center}
 .lbox h3{font-family:'Orbitron';color:var(--c);margin-bottom:0.4rem;letter-spacing:3px;font-size:0.9rem}
 .lbox p{color:var(--mt);font-size:0.8rem;margin-bottom:1rem}
 .lerr{color:#ff4444;font-size:0.75rem;margin-top:0.4rem}
@@ -242,6 +251,20 @@ section{padding:4rem 1.2rem}
 .img-up-btn:hover{background:rgba(0,240,255,0.05)}
 .img-prev{width:50px;height:50px;object-fit:cover;border:1px solid rgba(0,240,255,0.2)}
 .uploading{color:var(--y);font-family:'Space Mono';font-size:0.7rem;animation:pu 1s infinite}
+
+.forgot-link{background:none;border:none;color:var(--m);cursor:pointer;font-family:'Rajdhani';font-weight:600;font-size:0.82rem;letter-spacing:1px;margin-top:0.6rem;transition:color 0.3s;text-decoration:underline;text-underline-offset:3px}
+.forgot-link:hover{color:var(--c)}
+.recovery-tabs{display:flex;gap:0;margin-bottom:1rem;border:1px solid rgba(0,240,255,0.12)}
+.recovery-tab{flex:1;padding:0.5rem;font-family:'Orbitron';font-size:0.58rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;background:transparent;border:none;color:var(--mt);cursor:pointer;transition:all 0.3s;border-bottom:2px solid transparent}
+.recovery-tab.act{color:var(--c);background:rgba(0,240,255,0.04);border-bottom-color:var(--c)}
+.rk-display{background:rgba(0,240,255,0.04);border:2px dashed var(--c);padding:1rem;margin:1rem 0;text-align:center;position:relative}
+.rk-display code{font-family:'Space Mono';font-size:1.3rem;font-weight:700;color:var(--y);letter-spacing:4px;display:block;margin-bottom:0.5rem}
+.rk-display p{color:var(--mt);font-size:0.72rem;line-height:1.5}
+.rk-copy{background:none;border:1px solid var(--c);color:var(--c);font-family:'Orbitron';font-size:0.58rem;letter-spacing:2px;padding:0.3rem 0.8rem;cursor:pointer;transition:all 0.3s;margin-top:0.4rem}
+.rk-copy:hover{background:var(--c);color:var(--bg)}
+.rk-masked{font-family:'Space Mono';font-size:0.85rem;color:var(--y);letter-spacing:2px;padding:0.3rem 0.6rem;background:rgba(255,230,0,0.04);border:1px solid rgba(255,230,0,0.15);display:inline-block;margin:0.3rem 0}
+.rk-warning{display:flex;align-items:flex-start;gap:0.5rem;background:rgba(255,68,68,0.06);border:1px solid rgba(255,68,68,0.15);padding:0.7rem;margin-top:0.6rem;text-align:left}
+.rk-warning p{color:#ff8888;font-size:0.72rem;line-height:1.5}
 `;
 
 /* ═══ APP ═══ */
@@ -280,7 +303,7 @@ export default function App() {
 
   const isOpen = (() => { const h = new Date().getHours(); return h >= 11 && h < 23; })();
   const ph = `tel:${data.hero.phone || data.contact.phone}`;
-  const mode = CONFIG.GOOGLE_SCRIPT_URL ? "Google Sheets" : "Demo";
+
 
   return (<>
     <style>{CSS}</style>
@@ -377,7 +400,7 @@ export default function App() {
 
     <footer className="footer"><div className="flogo">FREEDOM CAFE</div><p className="fcopy">© 2026 Freedom Cafe & Gaming Zone</p></footer>
 
-    <div className="mode-badge">⚡ {mode} Mode{CONFIG.IMGBB_API_KEY ? " + ImgBB" : ""}</div>
+
 
     {showAdmin && <Admin data={data} saveSite={saveSite} reviews={reviews} saveRevs={saveRevs} fb={fb} saveFb={saveFb} auth={auth} saveAuth={saveAuth} loggedIn={loggedIn} setLoggedIn={setLoggedIn} onClose={() => setShowAdmin(false)} flash={flash} />}
     {toast && <div className="toast">{toast}</div>}
@@ -438,39 +461,153 @@ function Admin({ data, saveSite, reviews, saveRevs, fb, saveFb, auth, saveAuth, 
 
   useEffect(() => { setDraft(JSON.parse(JSON.stringify(data))); }, [data]);
 
+  const [setupSQ, setSetupSQ] = useState(SECURITY_QUESTIONS[0]);
+  const [setupSA, setSetupSA] = useState("");
+  const [showRKModal, setShowRKModal] = useState(false);
+  const [generatedRK, setGeneratedRK] = useState("");
+  const [forgotMode, setForgotMode] = useState(false);
+  const [recoveryTab, setRecoveryTab] = useState("question");
+  const [recAnswer, setRecAnswer] = useState("");
+  const [recKey, setRecKey] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [newPwC, setNewPwC] = useState("");
+  const [resetVerified, setResetVerified] = useState(false);
+
   // FIRST-TIME SETUP
   if (!auth && !loggedIn) {
     const setup = async () => {
       if (!su.trim() || !sp.trim()) { setErr("Both fields required"); return; }
       if (sp.length < 4) { setErr("Min 4 characters for password"); return; }
       if (sp !== sc) { setErr("Passwords don't match"); return; }
-      await saveAuth({ u: su.trim(), p: sp });
-      setLoggedIn(true); setErr(""); flash("Admin account created!");
+      if (!setupSA.trim()) { setErr("Security answer required"); return; }
+      const rk = generateRecoveryKey();
+      await saveAuth({ u: su.trim(), p: sp, sq: setupSQ, sa: setupSA.trim().toLowerCase(), rk });
+      setGeneratedRK(rk); setShowRKModal(true); setErr("");
     };
+
+    if (showRKModal) {
+      const copyKey = () => { navigator.clipboard.writeText(generatedRK).then(() => flash("Key copied!")).catch(() => {}); };
+      return <div className="adov"><div className="lbox">
+        <h3>🔑 RECOVERY KEY</h3>
+        <p>Save this key somewhere safe. You'll need it if you forget your password.</p>
+        <div className="rk-display">
+          <code>{generatedRK}</code>
+          <button className="rk-copy" onClick={copyKey}>📋 Copy Key</button>
+        </div>
+        <div className="rk-warning"><span>⚠️</span><p>This key is shown <strong>only once</strong>. Write it down or take a screenshot. It cannot be recovered later.</p></div>
+        <button className="btn gn" onClick={() => { setShowRKModal(false); setLoggedIn(true); flash("Admin account created!"); }} style={{ width: "100%", marginTop: "1rem" }}>I've Saved It — Continue</button>
+      </div></div>;
+    }
+
     return <div className="adov"><div className="lbox">
       <h3>🔐 SETUP ADMIN</h3><p>Create your admin login credentials</p>
       <div className="field"><label>Username</label><input value={su} onChange={e => setSu(e.target.value)} placeholder="e.g. owner" /></div>
       <div className="field"><label>Password</label><input type="password" value={sp} onChange={e => setSp(e.target.value)} placeholder="Min 4 chars" /></div>
-      <div className="field"><label>Confirm</label><input type="password" value={sc} onChange={e => setSc(e.target.value)} placeholder="Re-enter" onKeyDown={e => e.key === "Enter" && setup()} /></div>
+      <div className="field"><label>Confirm Password</label><input type="password" value={sc} onChange={e => setSc(e.target.value)} placeholder="Re-enter" /></div>
+      <div style={{ borderTop: "1px solid rgba(0,240,255,0.08)", marginTop: "0.6rem", paddingTop: "0.8rem" }}>
+        <p style={{ color: "var(--m)", fontFamily: "Orbitron", fontSize: "0.58rem", letterSpacing: 2, marginBottom: "0.6rem" }}>🛡️ ACCOUNT RECOVERY SETUP</p>
+        <div className="field"><label>Security Question</label>
+          <select value={setupSQ} onChange={e => setSetupSQ(e.target.value)} style={{ background: "var(--cd)", border: "1px solid rgba(0,240,255,0.12)", color: "var(--tx)", padding: "0.6rem", fontFamily: "Rajdhani", fontSize: "0.92rem", width: "100%" }}>
+            {SECURITY_QUESTIONS.map(q => <option key={q} value={q}>{q}</option>)}
+          </select>
+        </div>
+        <div className="field"><label>Your Answer</label><input value={setupSA} onChange={e => setSetupSA(e.target.value)} placeholder="Your answer (case-insensitive)" onKeyDown={e => e.key === "Enter" && setup()} /></div>
+      </div>
       <button className="btn" onClick={setup} style={{ width: "100%" }}>Create Account</button>
       {err && <p className="lerr">{err}</p>}
       <button onClick={onClose} style={{ marginTop: "0.8rem", background: "none", border: "none", color: "var(--mt)", cursor: "pointer", fontSize: "0.8rem" }}>← Back</button>
     </div></div>;
   }
 
-  // LOGIN
+  // LOGIN + FORGOT PASSWORD
   if (!loggedIn) {
     const login = () => {
-      if (lu === auth.u && lp === auth.p) { setLoggedIn(true); setErr(""); }
+      if (lu === auth.u && lp === auth.p) { setLoggedIn(true); setErr(""); setForgotMode(false); }
       else setErr("Invalid credentials");
     };
+
+    const verifyRecovery = () => {
+      if (recoveryTab === "question") {
+        if (!recAnswer.trim()) { setErr("Please enter your answer"); return; }
+        if (recAnswer.trim().toLowerCase() === auth.sa) { setResetVerified(true); setErr(""); }
+        else setErr("Incorrect answer");
+      } else {
+        if (!recKey.trim()) { setErr("Please enter your recovery key"); return; }
+        if (recKey.trim().toUpperCase() === auth.rk) { setResetVerified(true); setErr(""); }
+        else setErr("Invalid recovery key");
+      }
+    };
+
+    const resetPassword = async () => {
+      if (!newPw.trim()) { setErr("Password required"); return; }
+      if (newPw.length < 4) { setErr("Min 4 characters"); return; }
+      if (newPw !== newPwC) { setErr("Passwords don't match"); return; }
+      await saveAuth({ ...auth, p: newPw });
+      setForgotMode(false); setResetVerified(false); setNewPw(""); setNewPwC(""); setRecAnswer(""); setRecKey(""); setErr("");
+      flash("Password reset successful!");
+    };
+
+    const exitForgot = () => { setForgotMode(false); setResetVerified(false); setErr(""); setRecAnswer(""); setRecKey(""); setNewPw(""); setNewPwC(""); };
+
+    // Forgot Password UI
+    if (forgotMode) {
+      // If recovery is verified, show new password form
+      if (resetVerified) {
+        return <div className="adov"><div className="lbox">
+          <h3>🔓 NEW PASSWORD</h3><p>Set your new admin password</p>
+          <div className="field"><label>New Password</label><input type="password" value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="Min 4 chars" /></div>
+          <div className="field"><label>Confirm Password</label><input type="password" value={newPwC} onChange={e => setNewPwC(e.target.value)} placeholder="Re-enter" onKeyDown={e => e.key === "Enter" && resetPassword()} /></div>
+          <button className="btn gn" onClick={resetPassword} style={{ width: "100%" }}>Reset Password</button>
+          {err && <p className="lerr">{err}</p>}
+          <button onClick={exitForgot} className="forgot-link" style={{ marginTop: "0.8rem" }}>← Cancel</button>
+        </div></div>;
+      }
+
+      // Check if auth has recovery data
+      const hasRecovery = auth.sq && auth.sa;
+      const hasKey = !!auth.rk;
+
+      if (!hasRecovery && !hasKey) {
+        return <div className="adov"><div className="lbox">
+          <h3>😔 NO RECOVERY</h3>
+          <p>No recovery options were set up for this account. You'll need to reset the entire admin account.</p>
+          <button className="btn" onClick={async () => { await saveAuth(null); setForgotMode(false); setErr(""); flash("Account reset — set up a new one"); }} style={{ width: "100%", marginTop: "0.5rem" }}>Reset Account</button>
+          <button onClick={exitForgot} className="forgot-link" style={{ marginTop: "0.8rem" }}>← Back to Login</button>
+        </div></div>;
+      }
+
+      return <div className="adov"><div className="lbox">
+        <h3>🔑 RECOVER ACCESS</h3><p>Choose a recovery method</p>
+        <div className="recovery-tabs">
+          {hasRecovery && <button className={`recovery-tab${recoveryTab === "question" ? " act" : ""}`} onClick={() => { setRecoveryTab("question"); setErr(""); }}>🛡️ Question</button>}
+          {hasKey && <button className={`recovery-tab${recoveryTab === "key" ? " act" : ""}`} onClick={() => { setRecoveryTab("key"); setErr(""); }}>🔑 Key</button>}
+        </div>
+
+        {recoveryTab === "question" && hasRecovery && <>
+          <p style={{ color: "var(--y)", fontFamily: "Space Mono", fontSize: "0.72rem", textAlign: "left", marginBottom: "0.6rem", lineHeight: 1.5 }}>{auth.sq}</p>
+          <div className="field"><label>Your Answer</label><input value={recAnswer} onChange={e => setRecAnswer(e.target.value)} placeholder="Answer (case-insensitive)" onKeyDown={e => e.key === "Enter" && verifyRecovery()} /></div>
+        </>}
+
+        {recoveryTab === "key" && hasKey && <>
+          <div className="field"><label>Recovery Key</label><input value={recKey} onChange={e => setRecKey(e.target.value)} placeholder="XXXX-XXXX-XXXX" style={{ fontFamily: "Space Mono", letterSpacing: 2, textTransform: "uppercase" }} onKeyDown={e => e.key === "Enter" && verifyRecovery()} /></div>
+        </>}
+
+        <button className="btn mg" onClick={verifyRecovery} style={{ width: "100%" }}>Verify</button>
+        {err && <p className="lerr">{err}</p>}
+        <button onClick={exitForgot} className="forgot-link" style={{ marginTop: "0.8rem" }}>← Back to Login</button>
+      </div></div>;
+    }
+
+    // Normal Login UI
     return <div className="adov"><div className="lbox">
       <h3>🔒 ADMIN LOGIN</h3><p>Enter credentials to manage your site</p>
       <div className="field"><label>Username</label><input value={lu} onChange={e => setLu(e.target.value)} placeholder="Username" /></div>
       <div className="field"><label>Password</label><input type="password" value={lp} onChange={e => setLp(e.target.value)} placeholder="Password" onKeyDown={e => e.key === "Enter" && login()} /></div>
       <button className="btn" onClick={login} style={{ width: "100%" }}>Login</button>
       {err && <p className="lerr">{err}</p>}
-      <button onClick={onClose} style={{ marginTop: "0.8rem", background: "none", border: "none", color: "var(--mt)", cursor: "pointer", fontSize: "0.8rem" }}>← Back</button>
+      <button onClick={() => { setForgotMode(true); setErr(""); }} className="forgot-link">Forgot Password?</button>
+      <br />
+      <button onClick={onClose} style={{ marginTop: "0.6rem", background: "none", border: "none", color: "var(--mt)", cursor: "pointer", fontSize: "0.8rem" }}>← Back</button>
     </div></div>;
   }
 
@@ -578,11 +715,11 @@ function Admin({ data, saveSite, reviews, saveRevs, fb, saveFb, auth, saveAuth, 
 /* ═══ GALLERY UPLOAD ═══ */
 function GalleryUpload({ onUploaded, currentUrl }) {
   const [uploading, setUploading] = useState(false);
-  const ref = useRef(null);
+  const galRef = useRef(null);
   const handleFile = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!CONFIG.IMGBB_API_KEY) { flash("ImgBB not configured — paste URL instead"); return; }
+    if (!CONFIG.IMGBB_API_KEY) return;
     setUploading(true);
     const url = await uploadToImgBB(file);
     setUploading(false);
@@ -591,8 +728,8 @@ function GalleryUpload({ onUploaded, currentUrl }) {
   return <div className="img-up">
     {currentUrl && <img src={currentUrl} alt="preview" className="img-prev" />}
     {CONFIG.IMGBB_API_KEY && <>
-      <input ref={ref} type="file" accept="image/*" onChange={handleFile} style={{ display: "none" }} />
-      <button className="img-up-btn" onClick={() => ref.current?.click()}>📤 Upload Image</button>
+      <input ref={galRef} type="file" accept="image/*" onChange={handleFile} style={{ display: "none" }} />
+      <button className="img-up-btn" onClick={() => galRef.current?.click()}>📤 Upload Image</button>
     </>}
     {uploading && <span className="uploading">Uploading...</span>}
   </div>;
@@ -600,21 +737,75 @@ function GalleryUpload({ onUploaded, currentUrl }) {
 
 /* ═══ ACCOUNT TAB ═══ */
 function AccountTab({ auth, saveAuth, flash, setLoggedIn }) {
-  const [nu, setNu] = useState(auth?.u || ""); const [np, setNp] = useState(""); const [nc, setNc] = useState(""); const [err, setErr] = useState("");
+  const [nu, setNu] = useState(auth?.u || "");
+  const [np, setNp] = useState(""); const [nc, setNc] = useState("");
+  const [sq, setSQ] = useState(auth?.sq || SECURITY_QUESTIONS[0]);
+  const [sa, setSA] = useState(auth?.sa || "");
+  const [err, setErr] = useState("");
+  const [showNewRK, setShowNewRK] = useState(false);
+  const [newRK, setNewRK] = useState("");
+
+  const maskedKey = auth?.rk ? `${auth.rk.slice(0, 4)}••••••${auth.rk.slice(-3)}` : "Not set";
+
   const update = async () => {
     if (!nu.trim()) { setErr("Username required"); return; }
     if (np && np.length < 4) { setErr("Min 4 chars"); return; }
     if (np && np !== nc) { setErr("Passwords don't match"); return; }
-    await saveAuth({ u: nu.trim(), p: np || auth.p });
+    if (!sa.trim()) { setErr("Security answer required"); return; }
+    await saveAuth({ ...auth, u: nu.trim(), p: np || auth.p, sq, sa: sa.trim().toLowerCase() });
     setNp(""); setNc(""); setErr(""); flash("Account updated!");
   };
+
+  const regenKey = async () => {
+    const rk = generateRecoveryKey();
+    await saveAuth({ ...auth, rk });
+    setNewRK(rk); setShowNewRK(true); flash("New recovery key generated!");
+  };
+
+  const copyKey = () => { navigator.clipboard.writeText(newRK).then(() => flash("Key copied!")).catch(() => {}); };
+
   return <>
-    <p style={{ color: "var(--mt)", fontSize: "0.82rem", marginBottom: "1rem" }}>Credentials stored in {CONFIG.GOOGLE_SCRIPT_URL ? "Google Sheets" : "persistent storage"}.</p>
-    <div className="field"><label>Username</label><input value={nu} onChange={e => setNu(e.target.value)} /></div>
-    <div className="field"><label>New Password (blank = keep current)</label><input type="password" value={np} onChange={e => setNp(e.target.value)} /></div>
-    {np && <div className="field"><label>Confirm</label><input type="password" value={nc} onChange={e => setNc(e.target.value)} /></div>}
-    <button className="btn mg" onClick={update}>Update Account</button>
+    <p style={{ color: "var(--mt)", fontSize: "0.82rem", marginBottom: "1rem" }}>Credentials stored in Google Sheets.</p>
+
+    {/* Credentials */}
+    <div className="acd">
+      <div className="ach"><h4>🔐 CREDENTIALS</h4></div>
+      <div className="field"><label>Username</label><input value={nu} onChange={e => setNu(e.target.value)} /></div>
+      <div className="field"><label>New Password (blank = keep current)</label><input type="password" value={np} onChange={e => setNp(e.target.value)} /></div>
+      {np && <div className="field"><label>Confirm</label><input type="password" value={nc} onChange={e => setNc(e.target.value)} /></div>}
+    </div>
+
+    {/* Security Question */}
+    <div className="acd">
+      <div className="ach"><h4>🛡️ SECURITY QUESTION</h4></div>
+      <div className="field"><label>Question</label>
+        <select value={sq} onChange={e => setSQ(e.target.value)} style={{ background: "var(--cd)", border: "1px solid rgba(0,240,255,0.12)", color: "var(--tx)", padding: "0.6rem", fontFamily: "Rajdhani", fontSize: "0.92rem", width: "100%" }}>
+          {SECURITY_QUESTIONS.map(q => <option key={q} value={q}>{q}</option>)}
+        </select>
+      </div>
+      <div className="field"><label>Answer</label><input value={sa} onChange={e => setSA(e.target.value)} placeholder="Case-insensitive" /></div>
+    </div>
+
+    {/* Recovery Key */}
+    <div className="acd">
+      <div className="ach"><h4>🔑 RECOVERY KEY</h4></div>
+      {showNewRK ? <>
+        <p style={{ color: "var(--mt)", fontSize: "0.78rem", marginBottom: "0.5rem" }}>Your new recovery key:</p>
+        <div className="rk-display">
+          <code>{newRK}</code>
+          <button className="rk-copy" onClick={copyKey}>📋 Copy Key</button>
+        </div>
+        <div className="rk-warning"><span>⚠️</span><p>Save this key now. It will be hidden when you leave this page.</p></div>
+        <button className="bs ba" style={{ marginTop: "0.6rem" }} onClick={() => setShowNewRK(false)}>Done</button>
+      </> : <>
+        <p style={{ color: "var(--mt)", fontSize: "0.78rem", marginBottom: "0.4rem" }}>Current key: <span className="rk-masked">{maskedKey}</span></p>
+        <button className="bs bd" onClick={() => { if (window.confirm("Generate a new recovery key? The old one will stop working.")) regenKey(); }}>🔄 Regenerate Key</button>
+      </>}
+    </div>
+
+    <button className="btn mg" onClick={update} style={{ marginTop: "0.5rem" }}>Save Account Settings</button>
     {err && <p className="lerr">{err}</p>}
+
     <div style={{ marginTop: "1.5rem", paddingTop: "0.8rem", borderTop: "1px solid rgba(255,0,229,0.12)" }}>
       <button className="btn" onClick={() => setLoggedIn(false)} style={{ fontSize: "0.6rem", padding: "0.4rem 0.8rem" }}>🚪 Logout</button>
     </div>

@@ -1,0 +1,22 @@
+# ── Secrets ──
+.env
+.env.local
+.env.production
+.env.*.local
+
+# ── Dependencies ──
+node_modules/
+
+# ── Build ──
+dist/
+
+# ── IDE / OS ──
+.DS_Store
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+
+# ── Logs ──
+*.log
+npm-debug.log*

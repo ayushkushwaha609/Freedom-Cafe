@@ -267,28 +267,33 @@ section{padding:4rem 1.2rem}
 .rk-masked{font-family:'Space Mono';font-size:0.85rem;color:var(--y);letter-spacing:2px;padding:0.3rem 0.6rem;background:rgba(255,230,0,0.04);border:1px solid rgba(255,230,0,0.15);display:inline-block;margin:0.3rem 0}
 .rk-warning{display:flex;align-items:flex-start;gap:0.5rem;background:rgba(255,68,68,0.06);border:1px solid rgba(255,68,68,0.15);padding:0.7rem;margin-top:0.6rem;text-align:left}
 .rk-warning p{color:#ff8888;font-size:0.72rem;line-height:1.5}
+
+.lightbox{position:fixed;top:0;left:0;right:0;bottom:0;z-index:3000;background:rgba(0,0,0,0.95);display:flex;align-items:center;justify-content:center;cursor:zoom-out;animation:lbIn 0.3s ease-out}
+@keyframes lbIn{from{opacity:0}to{opacity:1}}
+.lightbox img{max-width:92vw;max-height:90vh;object-fit:contain;border:1px solid rgba(0,240,255,0.15);box-shadow:0 0 40px rgba(0,240,255,0.1)}
+.lb-close{position:absolute;top:1rem;right:1.2rem;background:none;border:1px solid rgba(255,255,255,0.2);color:white;font-size:1.2rem;width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.3s;font-family:'Orbitron'}
+.lb-close:hover{border-color:var(--c);color:var(--c)}
 `;
 
 /* ═══ APP ═══ */
 export default function App() {
-  const [data, setData] = useState(null);
-  const [reviews, setReviews] = useState([]);
+  const [data, setData] = useState(DEF);
+  const [reviews, setReviews] = useState(DEF_REVIEWS);
   const [fb, setFb] = useState([]);
   const [auth, setAuth] = useState(undefined); // undefined=loading, null=no account, object=exists
-  const [loading, setLoading] = useState(true);
   const [showAdmin, setShowAdmin] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [toast, setToast] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [lightbox, setLightbox] = useState(null);
 
   useEffect(() => {
     (async () => {
       const [s, r, f, a] = await Promise.all([DB.get("fc3-site"), DB.get("fc3-reviews"), DB.get("fc3-feedback"), DB.get("fc3-auth")]);
-      setData(s || DEF);
-      setReviews(r || DEF_REVIEWS);
-      setFb(f || []);
+      if (s) setData(s);
+      if (r) setReviews(r);
+      if (f) setFb(f);
       setAuth(a);
-      setLoading(false);
     })();
   }, []);
 
@@ -300,8 +305,6 @@ export default function App() {
 
   const closeMenu = () => setMenuOpen(false);
   const navTo = (id) => { closeMenu(); document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }); };
-
-  if (loading || !data) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#0a0a0f" }}><div style={{ fontFamily: "Orbitron", color: "#00f0ff", letterSpacing: 4, fontSize: "0.8rem" }}>LOADING...</div></div>;
 
   const isOpen = (() => { const h = new Date().getHours(); return h >= 11 && h < 23; })();
   const ph = `tel:${data.hero.phone || data.contact.phone}`;
@@ -347,7 +350,7 @@ export default function App() {
     <section id="about"><div className="wrap">
       <div className="shdr"><p className="stag">// Who We Are</p><h2 className="sttl">About Us</h2><div className="nln" /></div>
       <div className="abg">
-        <div className="abv"><div className="ir"><div className="fi">☕</div><div className="fi">🎱</div></div><div className="ir"><div className="fi">🎲</div><div className="fi">♟️</div></div></div>
+        <div className="abv" style={{ flexWrap: "wrap", padding: "1.5rem" }}>{data.about.stats.map((s, i) => <div className="fi" key={i} style={{ flexDirection: "column", gap: "0.2rem", width: "auto", height: "auto", padding: "0.8rem" }}><span style={{ fontSize: "1.3rem" }}>{s.n}</span><span style={{ fontSize: "0.55rem", letterSpacing: 1, color: "var(--mt)", textTransform: "uppercase" }}>{s.l}</span></div>)}</div>
         <div className="abt">
           <h3>{data.about.heading}</h3><p>{data.about.p1}</p><p>{data.about.p2}</p>
           <div className="sr">{data.about.stats.map((s, i) => <div key={i} style={{ textAlign: "center" }}><div className="sn">{s.n}</div><div className="sl">{s.l}</div></div>)}</div>
@@ -366,11 +369,16 @@ export default function App() {
     {/* GALLERY */}
     <section id="gallery"><div className="wrap">
       <div className="shdr"><p className="stag">// Our Space</p><h2 className="sttl">Gallery</h2><div className="nln" /></div>
-      <div className="gal">{data.gallery.map((g, i) => <div className="gi" key={i}>
+      <div className="gal">{data.gallery.map((g, i) => <div className="gi" key={i} onClick={() => g.url && setLightbox(g.url)} style={g.url ? { cursor: "zoom-in" } : {}}>
         {g.url ? <img src={g.url} alt={g.label} className="gi-bg" /> : <div className="gi-bg" style={{ background: g.g || "linear-gradient(135deg,#1a1a2e,#16213e)" }} />}
         <div className="gi-em">{g.emoji}</div>
       </div>)}</div>
     </div></section>
+
+    {lightbox && <div className="lightbox" onClick={() => setLightbox(null)}>
+      <button className="lb-close" onClick={() => setLightbox(null)}>✕</button>
+      <img src={lightbox} alt="Preview" onClick={e => e.stopPropagation()} style={{ cursor: "default" }} />
+    </div>}
 
     {/* REVIEWS */}
     <section id="reviews"><div className="wrap">
@@ -633,10 +641,12 @@ function Admin({ data, saveSite, reviews, saveRevs, fb, saveFb, auth, saveAuth, 
       <div className="field"><label>Heading</label><input value={draft.about.heading} onChange={e => ud("about.heading", e.target.value)} /></div>
       <div className="field"><label>Paragraph 1</label><textarea value={draft.about.p1} onChange={e => ud("about.p1", e.target.value)} /></div>
       <div className="field"><label>Paragraph 2</label><textarea value={draft.about.p2} onChange={e => ud("about.p2", e.target.value)} /></div>
-      {draft.about.stats.map((s, i) => <div key={i} style={{ display: "flex", gap: "0.4rem", marginBottom: "0.4rem" }}>
+      {draft.about.stats.map((s, i) => <div key={i} style={{ display: "flex", gap: "0.4rem", marginBottom: "0.4rem", alignItems: "flex-end" }}>
         <div className="field" style={{ flex: 1, marginBottom: 0 }}><label>Num</label><input value={s.n} onChange={e => { const st = [...draft.about.stats]; st[i] = { ...st[i], n: e.target.value }; ud("about.stats", st); }} /></div>
         <div className="field" style={{ flex: 1, marginBottom: 0 }}><label>Label</label><input value={s.l} onChange={e => { const st = [...draft.about.stats]; st[i] = { ...st[i], l: e.target.value }; ud("about.stats", st); }} /></div>
+        <button className="bs bd" onClick={() => { const st = [...draft.about.stats]; st.splice(i, 1); ud("about.stats", st); }} style={{ marginBottom: "1px" }}>✕</button>
       </div>)}
+      <button className="bs ba" onClick={() => ud("about.stats", [...draft.about.stats, { n: "0", l: "New Stat" }])}>+ Add Stat</button>
     </>}
 
     {tab === "menu" && <>

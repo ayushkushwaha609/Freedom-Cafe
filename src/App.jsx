@@ -14,13 +14,15 @@ const DB = {
   async get(key) {
     try {
       const r = await fetch(`${CONFIG.GOOGLE_SCRIPT_URL}?action=get&key=${encodeURIComponent(key)}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const t = await r.text();
       return t && t !== "null" ? JSON.parse(t) : null;
     } catch (e) { console.error("DB get error:", e); return null; }
   },
   async set(key, val) {
     try {
-      await fetch(CONFIG.GOOGLE_SCRIPT_URL, { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify({ action: "set", key, value: val }) });
+      const r = await fetch(CONFIG.GOOGLE_SCRIPT_URL, { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify({ action: "set", key, value: val }) });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return true;
     } catch (e) { console.error("DB set error:", e); return false; }
   },
@@ -367,7 +369,6 @@ export default function App() {
       <div className="gal">{data.gallery.map((g, i) => <div className="gi" key={i}>
         {g.url ? <img src={g.url} alt={g.label} className="gi-bg" /> : <div className="gi-bg" style={{ background: g.g || "linear-gradient(135deg,#1a1a2e,#16213e)" }} />}
         <div className="gi-em">{g.emoji}</div>
-        <div className="gi-ov"><h4>{g.label}</h4><p>{g.desc}</p></div>
       </div>)}</div>
     </div></section>
 
